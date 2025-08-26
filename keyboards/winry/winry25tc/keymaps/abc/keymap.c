@@ -18,6 +18,45 @@
 #include "quantum/midi/midi.h"
 #include "quantum/midi/qmk_midi.h"
 
+// clang-format off
+
+// -- Color definitions
+// Outer buttons - inactive
+#define PALE_GREEN_1 (hsv_t){85, 150, 80}
+#define PALE_GREEN_2 (hsv_t){95, 150, 80}
+
+// Inner buttons - active (bright rainbow)
+const hsv_t rainbow_colors[8] = {
+    {0, 255, 255},   // Red
+    {21, 255, 255},  // Orange
+    {42, 255, 255},  // Yellow
+    {85, 255, 255},  // Green
+    {128, 255, 255}, // Cyan
+    {170, 255, 255}, // Blue
+    {192, 255, 255}, // Purple
+    {234, 255, 255}  // Pink
+};
+
+// Inner buttons - inactive (dim rainbow)
+const hsv_t rainbow_colors_dim[8] = {
+    {0, 255, 80},
+    {21, 255, 80},
+    {42, 255, 80},
+    {85, 255, 80},
+    {128, 255, 80},
+    {170, 255, 80},
+    {192, 255, 80},
+    {234, 255, 80}
+};
+
+// -- LED index mapping
+// Outer buttons, clockwise from top-left
+const uint8_t outer_leds_clockwise[16] = {20, 21, 22, 23, 24, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
+// Inner CC buttons, clockwise from top-left
+const uint8_t inner_cc_leds_clockwise[8] = {6, 7, 8, 1, 2, 3, 4, 5};
+
+// clang-format on
+
 enum my_layers {
     _MIDI_LAYER,
     _NUMPAD_LAYER,
@@ -90,6 +129,28 @@ const uint8_t note_to_led[16] = {
     17, 18, 19 // 13-15
 };
 
+void set_initial_led_state(void) {
+    // Set outer button inactive colors
+    for (uint8_t i = 0; i < 16; i++) {
+        if (i % 2 == 0) {
+            rgblight_sethsv_at(PALE_GREEN_1.h, PALE_GREEN_1.s, PALE_GREEN_1.v, outer_leds_clockwise[i]);
+        } else {
+            rgblight_sethsv_at(PALE_GREEN_2.h, PALE_GREEN_2.s, PALE_GREEN_2.v, outer_leds_clockwise[i]);
+        }
+    }
+
+    // Set inner button inactive colors
+    for (uint8_t i = 0; i < 8; i++) {
+        hsv_t c = rainbow_colors_dim[i];
+        rgblight_sethsv_at(c.h, c.s, c.v, inner_cc_leds_clockwise[i]);
+    }
+
+    // Set the TG button (LED 0) to dim white
+    rgblight_sethsv_at(0, 0, 80, 0);
+
+    rgblight_set();
+}
+
 void midi_note_on_user(MidiDevice* device, uint8_t channel, uint8_t note, uint8_t velocity) {
     if (note >= 0 && note < 16) {
         // Green for notes 0-15
@@ -102,12 +163,33 @@ void midi_note_on_user(MidiDevice* device, uint8_t channel, uint8_t note, uint8_
     }
 }
 
+// Helper to find the index of a value in an array
+int8_t find_index_in_array(uint8_t value, const uint8_t* array, uint8_t size) {
+    for (uint8_t i = 0; i < size; i++) {
+        if (array[i] == value) {
+            return i;
+        }
+    }
+    return -1; // Not found
+}
+
 void midi_note_off_user(MidiDevice* device, uint8_t channel, uint8_t note, uint8_t velocity) {
+    uint8_t led_id = 0;
     if (note >= 0 && note < 16) {
-        rgblight_setrgb_at(0, 0, 0, note_to_led[note]);
-        rgblight_set();
+        led_id = note_to_led[note];
     } else if (note >= 32 && note < 48) {
-        rgblight_setrgb_at(0, 0, 0, note_to_led[note - 32]);
+        led_id = note_to_led[note - 32];
+    } else {
+        return; // Not a note we care about
+    }
+
+    int8_t clockwise_index = find_index_in_array(led_id, outer_leds_clockwise, 16);
+    if (clockwise_index != -1) {
+        if (clockwise_index % 2 == 0) {
+            rgblight_sethsv_at(PALE_GREEN_1.h, PALE_GREEN_1.s, PALE_GREEN_1.v, led_id);
+        } else {
+            rgblight_sethsv_at(PALE_GREEN_2.h, PALE_GREEN_2.s, PALE_GREEN_2.v, led_id);
+        }
         rgblight_set();
     }
 }
@@ -115,65 +197,58 @@ void midi_note_off_user(MidiDevice* device, uint8_t channel, uint8_t note, uint8
 void keyboard_post_init_user(void) {
     rgblight_enable_noeeprom();
     rgblight_mode(RGBLIGHT_MODE_STATIC_LIGHT);
-    rgblight_sethsv(HSV_WHITE);
+    set_initial_led_state();
     midi_register_noteon_callback(&midi_device, midi_note_on_user);
     midi_register_noteoff_callback(&midi_device, midi_note_off_user);
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-  uint8_t channel = 0; // MIDI channel 1
-  uint8_t velocity = 127;
-  uint8_t led_index = remap[(record->event.key.row * 5) + record->event.key.col];
+    uint8_t  channel         = 0; // MIDI channel 1
+    uint8_t  velocity        = 127;
+    uint8_t  led_index       = remap[(record->event.key.row * 5) + record->event.key.col];
+    int8_t   clockwise_index = -1;
+    uint16_t cc_num          = 0;
 
-  switch (keycode) {
-    case MIDI_NOTE_0 ... MIDI_NOTE_15:
-      if (record->event.pressed) {
-        midi_send_noteon(&midi_device, channel, keycode - MIDI_NOTE_0, velocity);
-      } else {
-        midi_send_noteoff(&midi_device, channel, keycode - MIDI_NOTE_0, 0);
-      }
-      return false; // Skip default processing
-    case MIDI_CC_19:
-    case MIDI_CC_21 ... MIDI_CC_24:
-      if (record->event.pressed) {
-        rgblight_setrgb_at(RGB_RED, led_index);
-        midi_send_cc(&midi_device, channel, keycode - MIDI_CC_19 + 19, velocity);
-      } else {
-        rgblight_setrgb_at(0,0,0, led_index);
-        midi_send_cc(&midi_device, channel, keycode - MIDI_CC_19 + 19, 0);
-      }
-      rgblight_set();
-      return false;
-    case MIDI_CC_SEQ_RESET:
-      if (record->event.pressed) { 
-        rgblight_setrgb_at(RGB_RED, led_index);
-        midi_send_cc(&midi_device, channel, 93, 127); 
-      } else { 
-        rgblight_setrgb_at(0,0,0, led_index);
-        midi_send_cc(&midi_device, channel, 93, 0); 
-      }
-      rgblight_set();
-      return false;
-    case MIDI_CC_TIMER_RESET:
-      if (record->event.pressed) { 
-        rgblight_setrgb_at(RGB_RED, led_index);
-        midi_send_cc(&midi_device, channel, 106, 127); 
-      } else { 
-        rgblight_setrgb_at(0,0,0, led_index);
-        midi_send_cc(&midi_device, channel, 106, 0); 
-      }
-      rgblight_set();
-      return false;
-    case MIDI_CC_SOFT_RESET:
-      if (record->event.pressed) { 
-        rgblight_setrgb_at(RGB_RED, led_index);
-        midi_send_cc(&midi_device, channel, 97, 127); 
-      } else { 
-        rgblight_setrgb_at(0,0,0, led_index);
-        midi_send_cc(&midi_device, channel, 97, 0); 
-      }
-      rgblight_set();
-      return false;
-  }
-  return true; // Process all other keycodes normally
+    switch (keycode) {
+        case MIDI_NOTE_0 ... MIDI_NOTE_15:
+            if (record->event.pressed) {
+                midi_send_noteon(&midi_device, channel, keycode - MIDI_NOTE_0, velocity);
+            } else {
+                midi_send_noteoff(&midi_device, channel, keycode - MIDI_NOTE_0, 0);
+            }
+            return false; // Skip default processing
+
+        case MIDI_CC_19:
+        case MIDI_CC_21 ... MIDI_CC_24:
+            cc_num = keycode - MIDI_CC_19 + 19;
+            break;
+        case MIDI_CC_SEQ_RESET:
+            cc_num = 93;
+            break;
+        case MIDI_CC_TIMER_RESET:
+            cc_num = 106;
+            break;
+        case MIDI_CC_SOFT_RESET:
+            cc_num = 97;
+            break;
+    }
+
+    if (cc_num > 0) {
+        clockwise_index = find_index_in_array(led_index, inner_cc_leds_clockwise, 8);
+        if (clockwise_index != -1) {
+            if (record->event.pressed) {
+                hsv_t c = rainbow_colors[clockwise_index];
+                rgblight_sethsv_at(c.h, c.s, c.v, led_index);
+                midi_send_cc(&midi_device, channel, cc_num, velocity);
+            } else {
+                hsv_t c = rainbow_colors_dim[clockwise_index];
+                rgblight_sethsv_at(c.h, c.s, c.v, led_index);
+                midi_send_cc(&midi_device, channel, cc_num, 0);
+            }
+            rgblight_set();
+        }
+        return false;
+    }
+
+    return true; // Process all other keycodes normally
 }
