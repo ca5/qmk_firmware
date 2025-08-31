@@ -22,8 +22,8 @@
 
 // -- Color definitions
 // Outer buttons - inactive
-#define PALE_GREEN_1 (hsv_t){85, 150, 10}
-#define PALE_GREEN_2 (hsv_t){95, 150, 10}
+#define PALE_GREEN_1 (hsv_t){85, 150, 30}
+#define PALE_GREEN_2 (hsv_t){95, 150, 30}
 
 // Inner buttons - active (bright rainbow)
 const hsv_t rainbow_colors[8] = {
@@ -39,14 +39,14 @@ const hsv_t rainbow_colors[8] = {
 
 // Inner buttons - inactive (dim rainbow)
 const hsv_t rainbow_colors_dim[8] = {
-    {0, 255, 10},
-    {21, 255, 10},
-    {42, 255, 10},
-    {85, 255, 10},
-    {128, 255, 10},
-    {170, 255, 10},
-    {192, 255, 10},
-    {234, 255, 10}
+    {0, 255, 30},
+    {21, 255, 30},
+    {42, 255, 30},
+    {85, 255, 30},
+    {128, 255, 30},
+    {170, 255, 30},
+    {192, 255, 30},
+    {234, 255, 30}
 };
 
 // -- LED index mapping
