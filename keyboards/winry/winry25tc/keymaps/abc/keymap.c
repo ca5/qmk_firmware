@@ -57,6 +57,9 @@ const uint8_t inner_cc_leds_clockwise[8] = {6, 7, 8, 1, 2, 3, 4, 5};
 
 // clang-format on
 
+// State for outer LEDs: 0 = off, 1 = green, 2 = white, 3 = both
+static uint8_t outer_led_states[16] = {0};
+
 enum my_layers {
     _MIDI_LAYER,
     _NUMPAD_LAYER,
@@ -146,21 +149,35 @@ void set_initial_led_state(void) {
     }
 
     // Set the TG button (LED 0) to dim white
-    rgblight_sethsv_at(0, 0, 80, 0);
+    rgblight_sethsv_at(0, 0, 100, 0);
 
     rgblight_set();
 }
 
 void midi_note_on_user(MidiDevice* device, uint8_t channel, uint8_t note, uint8_t velocity) {
+    uint8_t note_index;
+
     if (note >= 0 && note < 16) {
-        // Green for notes 0-15
-        rgblight_setrgb_at(RGB_GREEN, note_to_led[note]);
-        rgblight_set();
+        note_index = note;
+        outer_led_states[note_index] |= 1; // Set green flag
     } else if (note >= 32 && note < 48) {
-        // White for notes 32-47
-        rgblight_setrgb_at(RGB_WHITE, note_to_led[note - 32]);
-        rgblight_set();
+        note_index = note - 32;
+        outer_led_states[note_index] |= 2; // Set white flag
+    } else {
+        return; // Not a note we care about
     }
+
+    uint8_t led_id = note_to_led[note_index];
+    uint8_t state  = outer_led_states[note_index];
+
+    if (state == 3) { // Both green and white are active
+        rgblight_setrgb_at(RGB_GREEN, led_id);
+    } else if (state == 2) { // White only
+        rgblight_sethsv_at(0, 0, 100, led_id);
+    } else if (state == 1) { // Green only
+        rgblight_sethsv_at(85, 255, 190, led_id);
+    }
+    rgblight_set();
 }
 
 // Helper to find the index of a value in an array
@@ -174,24 +191,36 @@ int8_t find_index_in_array(uint8_t value, const uint8_t* array, uint8_t size) {
 }
 
 void midi_note_off_user(MidiDevice* device, uint8_t channel, uint8_t note, uint8_t velocity) {
-    uint8_t led_id = 0;
+    uint8_t note_index;
+
     if (note >= 0 && note < 16) {
-        led_id = note_to_led[note];
+        note_index = note;
+        outer_led_states[note_index] &= ~1; // Clear green flag
     } else if (note >= 32 && note < 48) {
-        led_id = note_to_led[note - 32];
+        note_index = note - 32;
+        outer_led_states[note_index] &= ~2; // Clear white flag
     } else {
         return; // Not a note we care about
     }
 
-    int8_t clockwise_index = find_index_in_array(led_id, outer_leds_clockwise, 16);
-    if (clockwise_index != -1) {
-        if (clockwise_index % 2 == 0) {
-            rgblight_sethsv_at(PALE_GREEN_1.h, PALE_GREEN_1.s, PALE_GREEN_1.v, led_id);
-        } else {
-            rgblight_sethsv_at(PALE_GREEN_2.h, PALE_GREEN_2.s, PALE_GREEN_2.v, led_id);
+    uint8_t led_id = note_to_led[note_index];
+    uint8_t state  = outer_led_states[note_index];
+
+    if (state == 0) { // Both are off, revert to default pale green
+        int8_t clockwise_index = find_index_in_array(led_id, outer_leds_clockwise, 16);
+        if (clockwise_index != -1) {
+            if (clockwise_index % 2 == 0) {
+                rgblight_sethsv_at(PALE_GREEN_1.h, PALE_GREEN_1.s, PALE_GREEN_1.v, led_id);
+            } else {
+                rgblight_sethsv_at(PALE_GREEN_2.h, PALE_GREEN_2.s, PALE_GREEN_2.v, led_id);
+            }
         }
-        rgblight_set();
+    } else if (state == 1) { // White was turned off, green remains
+        rgblight_setrgb_at(RGB_GREEN, led_id);
+    } else if (state == 2) { // Green was turned off, white remains
+        rgblight_sethsv_at(0, 0, 80, led_id);
     }
+    rgblight_set();
 }
 
 void keyboard_post_init_user(void) {
