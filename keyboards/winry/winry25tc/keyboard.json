@@ -16,9 +16,7 @@
         "led_count": 40,
         "max_brightness": 150,
         "animations": {
-            "rainbow_swirl": true,
-            "static_gradient": true,
-            "static_twinkle": true
+            "rainbow_swirl": true
         }
     },
     "features": {
