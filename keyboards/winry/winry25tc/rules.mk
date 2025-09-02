@@ -11,6 +11,6 @@ BACKLIGHT_ENABLE = no       # Enable keyboard backlight functionality
 RGBLIGHT_ENABLE = yes       # Enable keyboard RGB underglow
 
 KEY_LOCK_ENABLE = yes
-VIA_ENABLE = yes
+VIA_ENABLE = no
 MIDI_ENABLE = yes
 LTO_ENABLE = yes
