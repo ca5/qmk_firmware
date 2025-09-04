@@ -36,9 +36,7 @@ const uint8_t cc_sets[4][2] = {{1, 2}, {3, 4}, {5, 6}, {7, 8}};
 
 enum my_layers {
     _MIDI_NOTES,
-    _MIDI_CCS,
-    _NUMPAD_LAYER,
-    _FUNCTION_LAYER
+    _MIDI_CCS
 };
 
 enum custom_keycodes {
@@ -48,6 +46,7 @@ enum custom_keycodes {
     MIDI_NOTE_11, MIDI_NOTE_12, MIDI_NOTE_13, MIDI_NOTE_14, MIDI_NOTE_15,
     MIDI_CC_19, MIDI_CC_21, MIDI_CC_22, MIDI_CC_23, MIDI_CC_24,
     MIDI_CC_SEQ_RESET, MIDI_CC_TIMER_RESET, MIDI_CC_SOFT_RESET,
+    L_MIDI_NOTES, L_MIDI_CCS,
     CC_CH_1, CC_CH_2,
     CC_SET_1, CC_SET_2, CC_SET_3, CC_SET_4,
 };
@@ -56,35 +55,36 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [_MIDI_NOTES] = LAYOUT(
         MIDI_NOTE_0,  MIDI_NOTE_1,  MIDI_NOTE_2,  MIDI_NOTE_3,  MIDI_NOTE_4,
         MIDI_NOTE_15, MIDI_CC_SEQ_RESET, MIDI_CC_TIMER_RESET, MIDI_CC_SOFT_RESET, MIDI_NOTE_5,
-        MIDI_NOTE_14, MIDI_CC_19,   TG(_MIDI_CCS),   MIDI_CC_21,   MIDI_NOTE_6,
+        MIDI_NOTE_14, MIDI_CC_19,   L_MIDI_CCS,   MIDI_CC_21,   MIDI_NOTE_6,
         MIDI_NOTE_13, MIDI_CC_22,   MIDI_CC_23,   MIDI_CC_24,   MIDI_NOTE_7,
         MIDI_NOTE_12, MIDI_NOTE_11, MIDI_NOTE_10, MIDI_NOTE_9,  MIDI_NOTE_8
     ),
     [_MIDI_CCS] = LAYOUT(
         CC_CH_1, CC_CH_1, CC_SET_1, CC_CH_2, CC_CH_2,
         CC_CH_1, CC_CH_1, CC_SET_2, CC_CH_2, CC_CH_2,
-        CC_CH_1, CC_CH_1, TG(_MIDI_NOTES), CC_CH_2, CC_CH_2,
+        CC_CH_1, CC_CH_1, L_MIDI_NOTES, CC_CH_2, CC_CH_2,
         CC_CH_1, CC_CH_1, CC_SET_3, CC_CH_2, CC_CH_2,
         CC_CH_1, CC_CH_1, CC_SET_4, CC_CH_2, CC_CH_2
-    ),
-    [_NUMPAD_LAYER] = LAYOUT(
-        KC_NUM,  KC_PSLS, KC_PAST, KC_PMNS, KC_ESC,
-        KC_P7,   KC_P8,   KC_P9,   KC_PPLS, UG_TOGG,
-        KC_P4,   TG(_MIDI_NOTES),   KC_P6,   KC_PENT, UG_NEXT,
-        KC_P1,   KC_P2,   KC_P3,   KC_UP,   MO(_FUNCTION_LAYER),
-        KC_P0,   KC_PDOT, KC_LEFT, KC_DOWN, KC_RGHT
-    ),
-    [_FUNCTION_LAYER] = LAYOUT(
-        KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,
-        KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,
-        KC_F11,  KC_F12,  KC_MUTE, KC_VOLD, KC_VOLU,
-        KC_MPLY, KC_MSTP, KC_MPRV, KC_MNXT, _______,
-        _______, _______, _______, MI_OCTU, MI_OCTD
-    ),
+    )
 };
 
 const uint8_t remap[25] = {20,21,22,23,24,19,6,7,8,9,18,5,0,1,10,17,4,3,2,11,16,15,14,13,12};
 const uint8_t note_to_led[16] = {20,21,22,23,24,9,10,11,12,13,14,15,16,17,18,19};
+
+void set_initial_led_state(void);
+void set_ccs_layer_leds(void);
+
+layer_state_t layer_state_set_user(layer_state_t state) {
+    switch (get_highest_layer(state)) {
+        case _MIDI_CCS:
+            set_ccs_layer_leds();
+            break;
+        default:
+            set_initial_led_state();
+            break;
+    }
+    return state;
+}
 
 void set_initial_led_state(void) {
     for (uint8_t i = 0; i < 16; i++) {
@@ -115,18 +115,6 @@ void set_ccs_layer_leds(void) {
         }
     }
     rgblight_set();
-}
-
-layer_state_t layer_state_set_user(layer_state_t state) {
-    switch (get_highest_layer(state)) {
-        case _MIDI_CCS:
-            set_ccs_layer_leds();
-            break;
-        default:
-            set_initial_led_state();
-            break;
-    }
-    return state;
 }
 
 void midi_note_on_user(MidiDevice* device, uint8_t channel, uint8_t note, uint8_t velocity) {
@@ -193,13 +181,23 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     int8_t clockwise_index = -1;
     uint16_t cc_num = 0;
 
-    if (layer_state_is(_MIDI_CCS) && record->event.pressed) {
+    if (record->event.pressed) {
         switch (keycode) {
+            case L_MIDI_NOTES:
+                layer_move(_MIDI_NOTES);
+                return false;
+            case L_MIDI_CCS:
+                layer_move(_MIDI_CCS);
+                return false;
             case CC_CH_1:
-                midi_send_cc(&midi_device, channel, cc_sets[current_cc_set][0], get_cc_value(record->event.key.col, record->event.key.row));
+                if (layer_state_is(_MIDI_CCS)) {
+                    midi_send_cc(&midi_device, channel, cc_sets[current_cc_set][0], get_cc_value(record->event.key.col, record->event.key.row));
+                }
                 return false;
             case CC_CH_2:
-                midi_send_cc(&midi_device, channel, cc_sets[current_cc_set][1], get_cc_value(record->event.key.col, record->event.key.row));
+                if (layer_state_is(_MIDI_CCS)) {
+                    midi_send_cc(&midi_device, channel, cc_sets[current_cc_set][1], get_cc_value(record->event.key.col, record->event.key.row));
+                }
                 return false;
             case CC_SET_1: current_cc_set = 0; return false;
             case CC_SET_2: current_cc_set = 1; return false;
