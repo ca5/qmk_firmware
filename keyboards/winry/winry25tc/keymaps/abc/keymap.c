@@ -31,7 +31,7 @@ const hsv_t cc_ch2_colors_dim[4] = {{0, 255, 30}, {42, 255, 30}, {128, 255, 30},
 // -- LED index mapping
 const uint8_t outer_leds_clockwise[16] = {20, 21, 22, 23, 24, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
 const uint8_t inner_cc_leds_clockwise[8] = {6, 7, 8, 1, 2, 3, 4, 5};
-const uint8_t cc_set_leds[4] = {22, 8, 3, 14}; // Corresponds to CC_SET_1 to 4
+const uint8_t cc_set_leds[4] = {22, 7, 3, 14}; // Corresponds to CC_SET_1 to 4
 
 // clang-format on
 
