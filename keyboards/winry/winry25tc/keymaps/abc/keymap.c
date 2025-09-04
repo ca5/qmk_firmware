@@ -18,25 +18,27 @@ const hsv_t rainbow_colors_dim[8] = {
     {128, 255, 30}, {170, 255, 30}, {192, 255, 30}, {234, 255, 30}
 };
 
-// New colors for MIDI_CCS layer
-#define CC_CH1_COLOR_BRIGHT (hsv_t){170, 255, 255} // Blue
-#define CC_CH1_COLOR_DIM (hsv_t){170, 255, 30}
-#define CC_CH2_COLOR_BRIGHT (hsv_t){0, 255, 255}   // Red
-#define CC_CH2_COLOR_DIM (hsv_t){0, 255, 30}
-#define CC_SET_COLOR (hsv_t){42, 255, 255}  // Yellow
+// Colors for CC sets
+const hsv_t cc_ch1_colors[4] = {{170, 255, 255}, {21, 255, 255}, {85, 255, 255}, {192, 255, 255}};
+const hsv_t cc_ch2_colors[4] = {{0, 255, 255}, {42, 255, 255}, {128, 255, 255}, {234, 255, 255}};
+const hsv_t cc_ch1_colors_dim[4] = {{170, 255, 30}, {21, 255, 30}, {85, 255, 30}, {192, 255, 30}};
+const hsv_t cc_ch2_colors_dim[4] = {{0, 255, 30}, {42, 255, 30}, {128, 255, 30}, {234, 255, 30}};
+
+#define CC_SET_COLOR_BRIGHT (hsv_t){42, 255, 255}
+#define CC_SET_COLOR_DIM (hsv_t){42, 255, 30}
 #define LAYER_SWITCH_COLOR (hsv_t){0, 0, 255} // White
 
 // -- LED index mapping
 const uint8_t outer_leds_clockwise[16] = {20, 21, 22, 23, 24, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
 const uint8_t inner_cc_leds_clockwise[8] = {6, 7, 8, 1, 2, 3, 4, 5};
+const uint8_t cc_set_leds[4] = {8, 7, 3, 4}; // Corresponds to CC_SET_1 to 4
 
 // clang-format on
 
 static uint8_t outer_led_states[16] = {0};
 static uint8_t current_cc_set = 0;
 const uint8_t cc_sets[4][2] = {{1, 2}, {3, 4}, {5, 6}, {7, 8}};
-static uint8_t last_cc_value_1 = 0;
-static uint8_t last_cc_value_2 = 0;
+static uint8_t last_cc_values[8] = {0};
 
 
 enum my_layers {
@@ -80,13 +82,10 @@ void set_initial_led_state(void);
 void set_ccs_layer_leds(void);
 
 layer_state_t layer_state_set_user(layer_state_t state) {
-    switch (get_highest_layer(state)) {
-        case _MIDI_CCS:
-            set_ccs_layer_leds();
-            break;
-        default:
-            set_initial_led_state();
-            break;
+    if (get_highest_layer(state) == _MIDI_CCS) {
+        set_ccs_layer_leds();
+    } else {
+        set_initial_led_state();
     }
     return state;
 }
@@ -104,40 +103,31 @@ void set_initial_led_state(void) {
 
 void set_ccs_layer_leds(void) {
     // Left two columns (CC_CH_1)
-    uint8_t num_leds_1 = (last_cc_value_1 * 10 + 126) / 127;
+    uint8_t num_leds_1 = (last_cc_values[current_cc_set * 2] * 10 + 126) / 127;
     for (uint8_t i = 0; i < 10; i++) {
         uint8_t col = (i < 5) ? 0 : 1;
         uint8_t row = (i < 5) ? 4 - i : 4 - (i - 5);
         uint8_t led_index = remap[(row * 5) + col];
-        if (i < num_leds_1) {
-            rgblight_sethsv_at(CC_CH1_COLOR_BRIGHT.h, CC_CH1_COLOR_BRIGHT.s, CC_CH1_COLOR_BRIGHT.v, led_index);
-        } else {
-            rgblight_sethsv_at(CC_CH1_COLOR_DIM.h, CC_CH1_COLOR_DIM.s, CC_CH1_COLOR_DIM.v, led_index);
-        }
+        hsv_t color = (i < num_leds_1) ? cc_ch1_colors[current_cc_set] : cc_ch1_colors_dim[current_cc_set];
+        rgblight_sethsv_at(color.h, color.s, color.v, led_index);
     }
 
     // Right two columns (CC_CH_2)
-    uint8_t num_leds_2 = (last_cc_value_2 * 10 + 126) / 127;
+    uint8_t num_leds_2 = (last_cc_values[current_cc_set * 2 + 1] * 10 + 126) / 127;
     for (uint8_t i = 0; i < 10; i++) {
         uint8_t col = (i < 5) ? 3 : 4;
         uint8_t row = (i < 5) ? 4 - i : 4 - (i - 5);
         uint8_t led_index = remap[(row * 5) + col];
-        if (i < num_leds_2) {
-            rgblight_sethsv_at(CC_CH2_COLOR_BRIGHT.h, CC_CH2_COLOR_BRIGHT.s, CC_CH2_COLOR_BRIGHT.v, led_index);
-        } else {
-            rgblight_sethsv_at(CC_CH2_COLOR_DIM.h, CC_CH2_COLOR_DIM.s, CC_CH2_COLOR_DIM.v, led_index);
-        }
+        hsv_t color = (i < num_leds_2) ? cc_ch2_colors[current_cc_set] : cc_ch2_colors_dim[current_cc_set];
+        rgblight_sethsv_at(color.h, color.s, color.v, led_index);
     }
 
     // Middle column
-    for (uint8_t row = 0; row < 5; row++) {
-        uint8_t led_index = remap[(row * 5) + 2];
-        if (row == 2) {
-            rgblight_sethsv_at(LAYER_SWITCH_COLOR.h, LAYER_SWITCH_COLOR.s, LAYER_SWITCH_COLOR.v, led_index);
-        } else {
-            rgblight_sethsv_at(CC_SET_COLOR.h, CC_SET_COLOR.s, CC_SET_COLOR.v, led_index);
-        }
+    for (uint8_t i = 0; i < 4; i++) {
+        hsv_t color = (i == current_cc_set) ? CC_SET_COLOR_BRIGHT : CC_SET_COLOR_DIM;
+        rgblight_sethsv_at(color.h, color.s, color.v, cc_set_leds[i]);
     }
+    rgblight_sethsv_at(LAYER_SWITCH_COLOR.h, LAYER_SWITCH_COLOR.s, LAYER_SWITCH_COLOR.v, 0); // Center button
 
     rgblight_set();
 }
@@ -217,7 +207,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case CC_CH_1:
                 if (layer_state_is(_MIDI_CCS)) {
                     uint8_t cc_val = get_cc_value(record->event.key.col, record->event.key.row);
-                    last_cc_value_1 = cc_val;
+                    last_cc_values[current_cc_set * 2] = cc_val;
                     midi_send_cc(&midi_device, channel, cc_sets[current_cc_set][0], cc_val);
                     set_ccs_layer_leds();
                 }
@@ -225,15 +215,15 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case CC_CH_2:
                 if (layer_state_is(_MIDI_CCS)) {
                     uint8_t cc_val = get_cc_value(record->event.key.col, record->event.key.row);
-                    last_cc_value_2 = cc_val;
+                    last_cc_values[current_cc_set * 2 + 1] = cc_val;
                     midi_send_cc(&midi_device, channel, cc_sets[current_cc_set][1], cc_val);
                     set_ccs_layer_leds();
                 }
                 return false;
-            case CC_SET_1: current_cc_set = 0; return false;
-            case CC_SET_2: current_cc_set = 1; return false;
-            case CC_SET_3: current_cc_set = 2; return false;
-            case CC_SET_4: current_cc_set = 3; return false;
+            case CC_SET_1: current_cc_set = 0; set_ccs_layer_leds(); return false;
+            case CC_SET_2: current_cc_set = 1; set_ccs_layer_leds(); return false;
+            case CC_SET_3: current_cc_set = 2; set_ccs_layer_leds(); return false;
+            case CC_SET_4: current_cc_set = 3; set_ccs_layer_leds(); return false;
         }
     }
 
