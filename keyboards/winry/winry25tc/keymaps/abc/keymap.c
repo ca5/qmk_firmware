@@ -91,6 +91,7 @@ const uint8_t note_to_led[16] = {20,21,22,23,24,9,10,11,12,13,14,15,16,17,18,19}
 
 void set_initial_led_state(void);
 void set_ccs_layer_leds(void);
+void set_ccs_split_layer_leds(void);
 
 layer_state_t layer_state_set_user(layer_state_t state) {
     uint8_t layer = get_highest_layer(state);
