@@ -28,6 +28,12 @@ const hsv_t cc_ch2_colors_dim[4] = {{0, 255, 30}, {42, 255, 30}, {128, 255, 30},
 #define CC_SET_COLOR_DIM (hsv_t){42, 255, 30}
 #define LAYER_SWITCH_COLOR (hsv_t){0, 0, 255} // White
 
+// New colors for Layer 3 (_MIDI_CCS_SPLIT)
+const hsv_t split_cc_colors[4] = {{30, 255, 255}, {60, 255, 255}, {90, 255, 255}, {120, 255, 255}}; // Yellow, Lime, Green, Teal
+const hsv_t split_cc_colors_dim[4] = {{30, 255, 30}, {60, 255, 30}, {90, 255, 30}, {120, 255, 30}};
+#define CC_SET_COLOR_BRIGHT_SPLIT (hsv_t){213, 255, 255} // Purple
+#define CC_SET_COLOR_DIM_SPLIT (hsv_t){213, 255, 30}
+
 // -- LED index mapping
 const uint8_t outer_leds_clockwise[16] = {20, 21, 22, 23, 24, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
 const uint8_t inner_cc_leds_clockwise[8] = {6, 7, 8, 1, 2, 3, 4, 5};
@@ -157,17 +163,14 @@ void set_ccs_split_layer_leds(void) {
         for (uint8_t j = 0; j < 5; j++) {
             uint8_t row = 4 - j;
             uint8_t led_index = remap[(row * 5) + col];
-            // Use colors from existing CC layers for consistency
-            const hsv_t* colors = (i < 2) ? cc_ch1_colors : cc_ch2_colors;
-            const hsv_t* colors_dim = (i < 2) ? cc_ch1_colors_dim : cc_ch2_colors_dim;
-            hsv_t color = (j < num_leds) ? colors[current_cc_set] : colors_dim[current_cc_set];
+            hsv_t color = (j < num_leds) ? split_cc_colors[i] : split_cc_colors_dim[i];
             rgblight_sethsv_at(color.h, color.s, color.v, led_index);
         }
     }
 
     // Middle column for CC set selection
     for (uint8_t i = 0; i < 4; i++) {
-        hsv_t color = (i == current_cc_set) ? CC_SET_COLOR_BRIGHT : CC_SET_COLOR_DIM;
+        hsv_t color = (i == current_cc_set) ? CC_SET_COLOR_BRIGHT_SPLIT : CC_SET_COLOR_DIM_SPLIT;
         rgblight_sethsv_at(color.h, color.s, color.v, cc_set_leds[i]);
     }
     rgblight_sethsv_at(LAYER_SWITCH_COLOR.h, LAYER_SWITCH_COLOR.s, LAYER_SWITCH_COLOR.v, 0); // Center button
