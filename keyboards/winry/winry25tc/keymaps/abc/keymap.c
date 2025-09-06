@@ -29,8 +29,18 @@ const hsv_t cc_ch2_colors_dim[4] = {{0, 255, 30}, {42, 255, 30}, {128, 255, 30},
 #define LAYER_SWITCH_COLOR (hsv_t){0, 0, 255} // White
 
 // New colors for Layer 3 (_MIDI_CCS_SPLIT)
-const hsv_t split_cc_colors[4] = {{30, 255, 255}, {60, 255, 255}, {90, 255, 255}, {120, 255, 255}}; // Yellow, Lime, Green, Teal
-const hsv_t split_cc_colors_dim[4] = {{30, 255, 30}, {60, 255, 30}, {90, 255, 30}, {120, 255, 30}};
+const hsv_t split_cc_colors[4][4] = {
+    {{30, 255, 255}, {60, 255, 255}, {90, 255, 255}, {120, 255, 255}}, // Set 1: Yellow, Lime, Green, Teal
+    {{0, 255, 255}, {21, 255, 255}, {42, 255, 255}, {85, 255, 255}},   // Set 2: Rainbow 1-4
+    {{128, 255, 255}, {170, 255, 255}, {192, 255, 255}, {234, 255, 255}},// Set 3: Rainbow 5-8
+    {{0, 150, 255}, {70, 150, 255}, {140, 150, 255}, {210, 150, 255}}  // Set 4: Pastel versions
+};
+const hsv_t split_cc_colors_dim[4][4] = {
+    {{30, 255, 30}, {60, 255, 30}, {90, 255, 30}, {120, 255, 30}},
+    {{0, 255, 30}, {21, 255, 30}, {42, 255, 30}, {85, 255, 30}},
+    {{128, 255, 30}, {170, 255, 30}, {192, 255, 30}, {234, 255, 30}},
+    {{0, 150, 30}, {70, 150, 30}, {140, 150, 30}, {210, 150, 30}}
+};
 #define CC_SET_COLOR_BRIGHT_SPLIT (hsv_t){213, 255, 255} // Purple
 #define CC_SET_COLOR_DIM_SPLIT (hsv_t){213, 255, 30}
 
@@ -46,7 +56,7 @@ static uint8_t current_cc_set = 0;
 const uint8_t cc_sets[4][2] = {{1, 2}, {3, 4}, {5, 6}, {7, 8}};
 const uint8_t cc_sets_split[4][4] = {{10, 11, 12, 13}, {14, 15, 16, 17}, {18, 19, 20, 21}, {22, 23, 24, 25}};
 static uint8_t last_cc_values[8] = {0};
-static uint8_t last_cc_values_split[4] = {0};
+static uint8_t last_cc_values_split[4][4] = {{0}};
 
 
 enum my_layers {
@@ -158,12 +168,12 @@ void set_ccs_split_layer_leds(void) {
     const uint8_t cc_columns[] = {0, 1, 3, 4};
     for (uint8_t i = 0; i < 4; i++) {
         uint8_t col = cc_columns[i];
-        // 5 LEDs per column
-        uint8_t num_leds = (last_cc_values_split[i] * 5 + 126) / 127;
+        // 5 LEDs per column, based on the value for the current set and column
+        uint8_t num_leds = (last_cc_values_split[current_cc_set][i] * 5 + 126) / 127;
         for (uint8_t j = 0; j < 5; j++) {
             uint8_t row = 4 - j;
             uint8_t led_index = remap[(row * 5) + col];
-            hsv_t color = (j < num_leds) ? split_cc_colors[i] : split_cc_colors_dim[i];
+            hsv_t color = (j < num_leds) ? split_cc_colors[current_cc_set][i] : split_cc_colors_dim[current_cc_set][i];
             rgblight_sethsv_at(color.h, color.s, color.v, led_index);
         }
     }
@@ -278,7 +288,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case CC_SPLIT_1:
                 if (layer_state_is(_MIDI_CCS_SPLIT)) {
                     uint8_t cc_val = get_cc_value_split(record->event.key.row);
-                    last_cc_values_split[0] = cc_val;
+                    last_cc_values_split[current_cc_set][0] = cc_val;
                     midi_send_cc(&midi_device, channel, cc_sets_split[current_cc_set][0], cc_val);
                     set_ccs_split_layer_leds();
                 }
@@ -286,7 +296,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case CC_SPLIT_2:
                 if (layer_state_is(_MIDI_CCS_SPLIT)) {
                     uint8_t cc_val = get_cc_value_split(record->event.key.row);
-                    last_cc_values_split[1] = cc_val;
+                    last_cc_values_split[current_cc_set][1] = cc_val;
                     midi_send_cc(&midi_device, channel, cc_sets_split[current_cc_set][1], cc_val);
                     set_ccs_split_layer_leds();
                 }
@@ -294,7 +304,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case CC_SPLIT_3:
                 if (layer_state_is(_MIDI_CCS_SPLIT)) {
                     uint8_t cc_val = get_cc_value_split(record->event.key.row);
-                    last_cc_values_split[2] = cc_val;
+                    last_cc_values_split[current_cc_set][2] = cc_val;
                     midi_send_cc(&midi_device, channel, cc_sets_split[current_cc_set][2], cc_val);
                     set_ccs_split_layer_leds();
                 }
@@ -302,7 +312,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case CC_SPLIT_4:
                 if (layer_state_is(_MIDI_CCS_SPLIT)) {
                     uint8_t cc_val = get_cc_value_split(record->event.key.row);
-                    last_cc_values_split[3] = cc_val;
+                    last_cc_values_split[current_cc_set][3] = cc_val;
                     midi_send_cc(&midi_device, channel, cc_sets_split[current_cc_set][3], cc_val);
                     set_ccs_split_layer_leds();
                 }
