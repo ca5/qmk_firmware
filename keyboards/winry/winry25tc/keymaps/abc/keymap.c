@@ -48,13 +48,17 @@ const hsv_t split_cc_colors_dim[4][4] = {
 const uint8_t outer_leds_clockwise[16] = {20, 21, 22, 23, 24, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
 const uint8_t inner_cc_leds_clockwise[8] = {6, 7, 8, 1, 2, 3, 4, 5};
 const uint8_t cc_set_leds[4] = {22, 7, 3, 14}; // Corresponds to CC_SET_1 to 4
+const uint8_t note_layer_ccs[] = {93, 106, 97, 19, 21, 30, 31, 5};
+static uint8_t cc_toggle_states[8] = {0};
+const bool cc_btn_is_toggle[8] = {false, false, false, false, false, true, true, false};
+const uint8_t btn_to_clockwise_map[8] = {0, 1, 2, 7, 3, 6, 5, 4};
 
 // clang-format on
 
 static uint8_t outer_led_states[16] = {0};
 static uint8_t current_cc_set = 0;
 const uint8_t cc_sets[4][2] = {{1, 2}, {3, 4}, {5, 6}, {7, 8}};
-const uint8_t cc_sets_split[4][4] = {{10, 11, 12, 13}, {14, 15, 16, 17}, {18, 19, 20, 21}, {22, 23, 24, 25}};
+const uint8_t cc_sets_split[4][4] = {{0, 1, 2, 3}, {4, 5, 6, 7}, {8, 9, 10, 11}, {12, 13, 14, 15}};
 static uint8_t last_cc_values[8] = {0};
 static uint8_t last_cc_values_split[4][4] = {{0}};
 
@@ -70,8 +74,8 @@ enum custom_keycodes {
     MIDI_NOTE_1, MIDI_NOTE_2, MIDI_NOTE_3, MIDI_NOTE_4, MIDI_NOTE_5,
     MIDI_NOTE_6, MIDI_NOTE_7, MIDI_NOTE_8, MIDI_NOTE_9, MIDI_NOTE_10,
     MIDI_NOTE_11, MIDI_NOTE_12, MIDI_NOTE_13, MIDI_NOTE_14, MIDI_NOTE_15,
-    MIDI_CC_19, MIDI_CC_21, MIDI_CC_22, MIDI_CC_23, MIDI_CC_24,
-    MIDI_CC_SEQ_RESET, MIDI_CC_TIMER_RESET, MIDI_CC_SOFT_RESET,
+    MIDI_CC_BTN_0, MIDI_CC_BTN_1, MIDI_CC_BTN_2, MIDI_CC_BTN_3, MIDI_CC_BTN_4,
+    MIDI_CC_BTN_5, MIDI_CC_BTN_6, MIDI_CC_BTN_7,
     L_MIDI_NOTES, L_MIDI_CCS, L_MIDI_CCS_SPLIT,
     CC_CH_1, CC_CH_2,
     CC_SPLIT_1, CC_SPLIT_2, CC_SPLIT_3, CC_SPLIT_4,
@@ -80,11 +84,11 @@ enum custom_keycodes {
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [_MIDI_NOTES] = LAYOUT(
-        MIDI_NOTE_0,  MIDI_NOTE_1,  MIDI_NOTE_2,  MIDI_NOTE_3,  MIDI_NOTE_4,
-        MIDI_NOTE_15, MIDI_CC_SEQ_RESET, MIDI_CC_TIMER_RESET, MIDI_CC_SOFT_RESET, MIDI_NOTE_5,
-        MIDI_NOTE_14, MIDI_CC_19,   L_MIDI_CCS,   MIDI_CC_21,   MIDI_NOTE_6,
-        MIDI_NOTE_13, MIDI_CC_22,   MIDI_CC_23,   MIDI_CC_24,   MIDI_NOTE_7,
-        MIDI_NOTE_12, MIDI_NOTE_11, MIDI_NOTE_10, MIDI_NOTE_9,  MIDI_NOTE_8
+        MIDI_NOTE_0,   MIDI_NOTE_1,   MIDI_NOTE_2,   MIDI_NOTE_3,   MIDI_NOTE_4,
+        MIDI_NOTE_15,  MIDI_CC_BTN_0, MIDI_CC_BTN_1, MIDI_CC_BTN_2, MIDI_NOTE_5,
+        MIDI_NOTE_14,  MIDI_CC_BTN_3, L_MIDI_CCS,    MIDI_CC_BTN_4, MIDI_NOTE_6,
+        MIDI_NOTE_13,  MIDI_CC_BTN_5, MIDI_CC_BTN_6, MIDI_CC_BTN_7, MIDI_NOTE_7,
+        MIDI_NOTE_12,  MIDI_NOTE_11,  MIDI_NOTE_10,  MIDI_NOTE_9,   MIDI_NOTE_8
     ),
     [_MIDI_CCS] = LAYOUT(
         CC_CH_1, CC_CH_1, CC_SET_1, CC_CH_2, CC_CH_2,
@@ -125,10 +129,18 @@ void set_initial_led_state(void) {
     for (uint8_t i = 0; i < 16; i++) {
         rgblight_sethsv_at((i % 2 == 0) ? PALE_GREEN_1.h : PALE_GREEN_2.h, 150, 30, outer_leds_clockwise[i]);
     }
+    // Initialize CC button LEDs based on their toggle state
     for (uint8_t i = 0; i < 8; i++) {
-        rgblight_sethsv_at(rainbow_colors_dim[i].h, rainbow_colors_dim[i].s, rainbow_colors_dim[i].v, inner_cc_leds_clockwise[i]);
+        uint8_t clockwise_index = btn_to_clockwise_map[i];
+        hsv_t c;
+        if (cc_btn_is_toggle[i]) {
+            c = cc_toggle_states[i] ? rainbow_colors[clockwise_index] : rainbow_colors_dim[clockwise_index];
+        } else {
+            c = rainbow_colors_dim[clockwise_index]; // Momentary buttons are off by default
+        }
+        rgblight_sethsv_at(c.h, c.s, c.v, inner_cc_leds_clockwise[clockwise_index]);
     }
-    rgblight_sethsv_at(0, 0, 100, 0);
+    rgblight_sethsv_at(0, 0, 100, 0); // Center button
     rgblight_set();
 }
 
@@ -256,7 +268,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     uint8_t channel = 0, velocity = 127;
     uint8_t led_index = remap[(record->event.key.row * 5) + record->event.key.col];
     int8_t clockwise_index = -1;
-    uint16_t cc_num = 0;
 
     if (record->event.pressed) {
         switch (keycode) {
@@ -357,24 +368,34 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (record->event.pressed) midi_send_noteon(&midi_device, channel, keycode - MIDI_NOTE_0, velocity);
             else midi_send_noteoff(&midi_device, channel, keycode - MIDI_NOTE_0, 0);
             return false;
-        case MIDI_CC_19:
-        case MIDI_CC_21 ... MIDI_CC_24:
-            cc_num = keycode - MIDI_CC_19 + 19;
-            break;
-        case MIDI_CC_SEQ_RESET: cc_num = 93; break;
-        case MIDI_CC_TIMER_RESET: cc_num = 106; break;
-        case MIDI_CC_SOFT_RESET: cc_num = 97; break;
-    }
 
-    if (cc_num > 0) {
-        clockwise_index = find_index_in_array(led_index, inner_cc_leds_clockwise, 8);
-        if (clockwise_index != -1) {
-            hsv_t c = record->event.pressed ? rainbow_colors[clockwise_index] : rainbow_colors_dim[clockwise_index];
-            rgblight_sethsv_at(c.h, c.s, c.v, led_index);
-            midi_send_cc(&midi_device, channel, cc_num, record->event.pressed ? velocity : 0);
-            rgblight_set();
+        case MIDI_CC_BTN_0 ... MIDI_CC_BTN_7: {
+            uint8_t btn_index = keycode - MIDI_CC_BTN_0;
+            uint8_t cc_num = note_layer_ccs[btn_index];
+            clockwise_index = find_index_in_array(led_index, inner_cc_leds_clockwise, 8);
+
+            if (cc_btn_is_toggle[btn_index]) {
+                if (record->event.pressed) {
+                    cc_toggle_states[btn_index] = !cc_toggle_states[btn_index];
+                    uint8_t cc_val = cc_toggle_states[btn_index] ? 127 : 0;
+                    midi_send_cc(&midi_device, channel, cc_num, cc_val);
+
+                    if (clockwise_index != -1) {
+                        hsv_t c = cc_toggle_states[btn_index] ? rainbow_colors[clockwise_index] : rainbow_colors_dim[clockwise_index];
+                        rgblight_sethsv_at(c.h, c.s, c.v, led_index);
+                        rgblight_set();
+                    }
+                }
+            } else {
+                if (clockwise_index != -1) {
+                    hsv_t c = record->event.pressed ? rainbow_colors[clockwise_index] : rainbow_colors_dim[clockwise_index];
+                    rgblight_sethsv_at(c.h, c.s, c.v, led_index);
+                    midi_send_cc(&midi_device, channel, cc_num, record->event.pressed ? velocity : 0);
+                    rgblight_set();
+                }
+            }
+            return false;
         }
-        return false;
     }
 
     return true;
